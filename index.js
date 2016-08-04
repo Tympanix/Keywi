@@ -1,13 +1,7 @@
 'use strict';
 
-const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const commander = require('commander');
-
-const Signer = require('./signer');
-
-const SECRET = 'mysecret';
+const vault = require('./vault');
 
 commander
     .version('0.0.1')
@@ -24,26 +18,22 @@ if (commander.decypher){
 }
 
 function encrypt(){
-    const cipher = crypto.createCipher('aes-256-cbc', SECRET)
-    const signer = new Signer('hello world');
-
-    const input = fs.createReadStream('in.txt');
-    const output = fs.createWriteStream('out.txt');
-
-    // Pipe the input through the cipher and to the output!
-    input.pipe(cipher).pipe(signer).pipe(output);
+    vault.writeVault()
+        .then(function(data) {
+            console.log(data);
+        })
+        .catch(function(err) {
+            console.error(err);
+        })
 }
 
 
 function decrypt(){
-    const decipher = crypto.createDecipher('aes-256-cbc', SECRET)
-
-    const input = fs.createReadStream('out.txt');
-    const output = fs.createWriteStream('copy.txt');
-
-    input.pipe(decipher).pipe(output);
-
-    decipher.on('error', function(e){
-        console.log("Error!");
-    })
+    vault.readVault()
+        .then(function(data) {
+            console.log(data);
+        })
+        .catch(function(err) {
+            console.error(err);
+        })
 }
