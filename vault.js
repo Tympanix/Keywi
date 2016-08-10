@@ -13,12 +13,19 @@ var VAULT = {
     education: "Software Engineer"
 }
 
-function writeVault(){
+function writeVault(masterPassword){
     const defer = Q.defer();
 
+    if (!masterPassword) {
+        defer.reject("No master password!");
+        return defer.promise;
+    }
+
+    const key = hashPassword(masterPassword, SALT);
+
     const data = new Buffer(JSON.stringify(VAULT), 'utf8');
-    const cipher = crypto.createCipher(config.CIPHER, config.SECRET);
-    const hmac = crypto.createHmac(config.HMAC, config.SECRET);
+    const cipher = crypto.createCipher(config.CIPHER, key.enckey);
+    const hmac = crypto.createHmac(config.HMAC, key.hmackey);
     const output = fs.createWriteStream(config.OUTPUT_FILE);
 
     cipher.on('readable', () => {
@@ -56,17 +63,54 @@ function writeVault(){
     return defer.promise;
 }
 
-function readVault(){
+function hashPassword(password, salt){
+
+    var pass = null;
+    if (!Buffer.isBuffer(password)){
+        pass = new Buffer(password, 'utf8');
+    } else {
+        pass = password;
+    }
+
+    const masterKey = crypto.pbkdf2Sync(pass, salt, config.KDF_ITER, config.KDF_KEYLEN, config.KDF_DIGEST);
+
+    console.log("MasterKey", masterKey.toString('hex'));
+
+    const hmacKeygen = crypto.createHmac(config.KDF_DIGEST, config.KDF_HMAC_SECRET);
+    hmacKeygen.update(masterKey);
+    const hmacKey = hmacKeygen.digest();
+    console.log("HMAC key", hmacKey.toString('hex'));
+
+    const encKeygen = crypto.createHmac(config.KDF_DIGEST, config.KDF_ENC_SECRET);
+    encKeygen.update(masterKey);
+    const encKey = encKeygen.digest();
+    console.log("Enc key", encKey.toString('hex'));
+
+    return {
+        hmackey: hmacKey,
+        enckey: encKey
+    }
+}
+
+function readVault(masterPassword, vaultFile){
     const defer = Q.defer();
 
+    if (!masterPassword) {
+        defer.reject("No master password!");
+        return defer.promise;
+    }
+
     var output = "";
-    const decipher = crypto.createDecipher(config.CIPHER, config.SECRET)
-    const hmac = crypto.createHmac(config.HMAC, config.SECRET);
-    const input = fs.readFileSync('files/out.txt');
+    const input = fs.readFileSync(vaultFile || config.OUTPUT_FILE);
 
     const salt = input.slice(0, 32);
     const vaultHmac = input.slice(input.length - 32);
     const cipherText = input.slice(32, input.length - 32);
+
+    const key = hashPassword(masterPassword, salt);
+
+    const decipher = crypto.createDecipher(config.CIPHER, key.enckey)
+    const hmac = crypto.createHmac(config.HMAC, key.hmackey);
 
     decipher.on('readable', () => {
         var data = decipher.read();
@@ -117,3 +161,4 @@ function generateSalt(){
 
 exports.writeVault = writeVault;
 exports.readVault = readVault;
+exports.hashPassword = hashPassword;
